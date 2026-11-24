@@ -25,6 +25,19 @@ interface SimulateBody {
 }
 
 /**
+ * Gas estimation surfaced to the invocation tool after a dry-run simulation.
+ * Values are sourced from the `simulateTransaction` response so the UI can
+ * show a fee breakdown before the user submits the transaction.
+ */
+interface GasEstimate {
+  cpuInstructions: number;
+  memoryBytes: number;
+  ledgerReads: number;
+  ledgerWrites: number;
+  fee: string;
+}
+
+/**
  * Read the request body, giving up as soon as it passes `maxBytes` so an
  * oversized body is never buffered in full. Returns null when it is too large.
  */
@@ -44,6 +57,30 @@ async function readCappedBody(req: Request, maxBytes: number): Promise<string | 
     chunks.push(value);
   }
   return new TextDecoder().decode(Buffer.concat(chunks));
+}
+
+/**
+ * Extract the gas estimation from a `simulateTransaction` result. The Soroban
+ * RPC reports resource usage under `cost` (CPU instructions + memory bytes)
+ * and `result.footprint` (ledger read/write keys), with the estimated fee in
+ * `minResourceFee`. Missing fields fall back to zero so the UI always has a
+ * complete breakdown to render.
+ */
+function extractGasEstimate(result: unknown): GasEstimate | null {
+  if (!result || typeof result !== "object") return null;
+  const r = result as Record<string, unknown>;
+  const cost = (r.cost ?? {}) as Record<string, unknown>;
+  const footprint = (r.footprint ?? {}) as Record<string, unknown>;
+  const readOnly = Array.isArray(footprint.readOnly) ? footprint.readOnly.length : 0;
+  const readWrite = Array.isArray(footprint.readWrite) ? footprint.readWrite.length : 0;
+  const fee = typeof r.minResourceFee === "string" ? r.minResourceFee : "0";
+  return {
+    cpuInstructions: Number(cost.cpuInsns ?? 0),
+    memoryBytes: Number(cost.memBytes ?? 0),
+    ledgerReads: readOnly,
+    ledgerWrites: readWrite,
+    fee,
+  };
 }
 
 export async function POST(req: Request, { params }: Params) {
@@ -88,7 +125,8 @@ export async function POST(req: Request, { params }: Params) {
   try {
     const scArgs = args.map((a) => coerceArgInput(a.value, a.type));
     const result = await simulateInvocation(params.id, body.functionName, scArgs);
-    return NextResponse.json(result);
+    const gas = extractGasEstimate(result);
+    return NextResponse.json(gas ? { ...result, gas } : result);
   } catch (err) {
     return NextResponse.json(
       { success: false, error: err instanceof Error ? err.message : "Invalid arguments" },
