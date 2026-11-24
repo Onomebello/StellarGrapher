@@ -152,3 +152,8 @@ Contributions are welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md) for how to g
 ## License
 
 MIT — see [LICENSE](./LICENSE).
+
+## Handsoff notes
+
+<!-- handsoff-issue-22 -->
+- #22: feat(frontend): Persist XDR decoder history in session storage
