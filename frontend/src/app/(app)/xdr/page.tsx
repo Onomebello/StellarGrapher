@@ -10,11 +10,12 @@ export const metadata: Metadata = {
 };
 
 interface Props {
-  searchParams: { input?: string };
+  searchParams: { input?: string; xdr?: string };
 }
 
 export default async function XdrPage({ searchParams }: Props) {
-  const input = searchParams.input ? base64FromQueryParam(searchParams.input) : undefined;
+  const rawInput = searchParams.xdr ?? searchParams.input;
+  const input = rawInput ? base64FromQueryParam(rawInput) : undefined;
   const result = input ? await decodeXdrAction(input) : null;
 
   return (
